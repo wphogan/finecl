@@ -1,0 +1,62 @@
+# Train settings
+batch_size: 32
+evaluate_during_training_epoch: 5 # evaluateing every X epochs
+num_train_epochs: 1 # TODO! 200
+num_train_epochs_debug: 5 # used when debug mode is active
+
+# Used to load pretrained models
+load_pretrained_checkpoint: True
+pretrain_checkpoint: ${work_dir}/pretrained_models/fine_cl.bin
+
+# Ignore Dev set:
+ignore_dev_set: False # Only set to True when collecting learning order data
+
+# Batch- vs epoch-based learning order
+# True: epoch-based learning order
+# False: batch-based learning order (default)
+epoch_based_learning_order: False
+
+# High-quality data mode
+# Note: these settings are used when training a cross-entropy model on trimmed subsets of distantly labeled data
+use_high_quality_training_data: False
+data_path_high_quality: # PATH TO HIGH-QUALITY DATA
+n_epochs_high_quality_data: x # determines how many epochs of data to use for high-quality dataset. x = N/A, 1, 2, 3, 4, 5, 6
+
+# Use pre-training data from ERICA paper
+use_erica_data: False # True or False. False defaults to docred data
+erica_file_num: 0 # 0 to 9 for the training file to use when collecting learning order
+prepro_erica_training_data_dir: ${work_dir}/data/pretrain_data
+
+# BERT
+#model_type: 'bert'
+#model_name_or_path: 'bert-base-uncased'
+#prepro_data_dir: ${work_dir}/data/docred_bert_uncased
+
+# RoBERTa
+model_type: 'roberta'
+model_name_or_path: 'roberta-base'
+prepro_data_dir: ${work_dir}/data/docred_roberta # Data from ERICA repo
+
+# Use reduced proportions of annotated training data
+reduced_data: False
+train_prop: 0.01 # 0.10, 0.01
+
+# Distant for pretraining, annotated for fine-tuning
+training_data_type: 'annotated' # 'annotated' or 'distant'
+
+################
+# STATIC
+################
+max_seq_length: 512 # The maximum total input sequence length after WordPiece tokenization. Sequences longer than this will be truncated, and sequences shorter than this will be padded."
+gradient_accumulation_steps: 1  #Number of updates steps to accumulate before performing a backward/update pass
+learning_rate: 4e-5 # The initial learning rate for Adam
+weight_decay: 0.0 # Weight deay if we apply some.
+adam_epsilon: 1e-8 #Epsilon for Adam optimizer
+max_grad_norm: 1.0 #Max gradient norm.
+seed: 42 #random seed for initialization
+logging_steps: 50 #Log every X updates steps. Default: 50
+save_name: 'saved_model'
+train_prefix: 'train'
+test_prefix: 'test'
+ratio: 1.0
+ckpt: None

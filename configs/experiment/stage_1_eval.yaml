@@ -1,0 +1,19 @@
+# @package _global_
+
+# to execute this experiment run:
+# python run.py experiment=stage_1.yaml
+
+defaults:
+  - override /mode: eval.yaml
+  - override /trainer: cross_entropy.yaml
+  - override /model: roberta_model.yaml
+
+# name of the run determines folder name in logs
+# it's also accessed by loggers
+name: "stage_1_eval"
+
+debug_mode: False
+model_path_datetime: PATH_TO_CHECKPOINT
+wcl_method: False # Run WCL method to denoise data
+input_theta: -1
+error_analysis: False

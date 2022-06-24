@@ -1,0 +1,36 @@
+#
+# tacred Experiments
+#
+#dataset: "tacred"
+#train_prop: 0.01 # Train prop: 1%, 10%, 100% training data
+#max_epoch: 20 # 8, 20
+
+#
+# semeval Experiments
+#
+dataset: "semeval"
+train_prop: 1 # 0.01, 0.10. 1
+max_epoch: 8 # 20, 50
+
+
+#
+# General experiment settings
+#
+pretrained_model_path: "None" # Checkpoint, "None" will load BERT
+model_name_or_path: 'bert-base-uncased' # Base model: 'bert-base-uncased' 'roberta-base'
+lr: 1e-5
+batch_size_per_gpu: 2
+max_length: 512
+data_dir: ${work_dir}/data/
+do_lower_case: True
+seed: 42
+mode: "CM"
+hidden_size: 768
+encoder: "bert"
+optim: "adamw"
+weight_decay: 1e-5
+adam_epsilon: 1e-8
+warmup_steps: 500
+max_grad_norm: 1
+rel_num: 0 # just a placeholder to be overwritten by count of rel classes in rel2id.json
+entity_marker: True # True: use entity markers, False: use [CLS] token for rel representations

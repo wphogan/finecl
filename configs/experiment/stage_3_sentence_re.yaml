@@ -1,0 +1,16 @@
+# @package _global_
+
+# to execute this experiment run:
+# python run.py experiment=stage_1.yaml
+
+defaults:
+  - override /mode: exp.yaml
+  - override /trainer: sentence_re.yaml
+  - override /model: roberta_model.yaml
+
+# name of the run determines folder name in logs
+# it's also accessed by loggers
+name: "stage_3_sentence_re"
+
+# Debug mode
+debug_mode: False

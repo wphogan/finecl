@@ -1,0 +1,4 @@
+defaults:
+  - preprocess.yaml
+
+data_dir: ${work_dir}/data/DocRED_debug
