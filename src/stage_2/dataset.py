@@ -7,6 +7,7 @@ import random
 import math
 import torch
 import numpy as np
+from os.path import join
 from collections import Counter
 from torch.utils import data
 from src.stage_2.utils import EntityMarker
@@ -46,23 +47,23 @@ class CP_R_Dataset(data.Dataset):
     def __init__(self, config):
         self.config = config
 
-        self.path = os.path.join(config.trainer.data_dir, 'pretrain_data')
+        self.path = join(config.trainer.data_dir, 'erica_data')
 
         # if self.config.trainer.fine_grained:
-        self.order_dict = json.load(open(os.path.join(self.path, 'order_dict_augmented.json')))
+        self.order_dict = json.load(open(join(self.path, 'order_dict_augmented.json')))
         self.scheduler = Scheduler(self.order_dict)
 
-        self.rel2id = json.load(open(os.path.join(config.trainer.data_dir, "DOC/relation2idx.json")))
+        self.rel2id = json.load(open(join(self.path, "rel2id.json")))
         self.id2rel = {v: k for k, v in self.rel2id.items()}
 
-        self.P_info = json.load(open(os.path.join(config.trainer.data_dir, 'DOC/P_info_tokenized_roberta.json'), 'r'))
+        self.P_info = json.load(open(join(self.path, 'P_info_tokenized_roberta.json'), 'r'))
         self.h_t_limit = 1000
         self.neg_multiple = 32
         self.relation_num = len(list(self.rel2id.keys()))
         self.max_length = config.trainer.max_length
 
         self.entityMarker = EntityMarker(config)
-        if config.trainer.model_name_or_path == 'bert':
+        if config.model_name_or_path == 'bert':
             self.idx2token = {v: k for k, v in self.entityMarker.tokenizer.vocab.items()}
 
         self.type2mask = ['[unused' + str(x) + ']' for x in range(1, 101)]
@@ -159,7 +160,7 @@ class CP_R_Dataset(data.Dataset):
         file_name = f'train_distant_{file_id}.json'
         print(f'Read data file {file_name}.')
         # self.config.trainer.dataset_name
-        train_data = json.load(open(os.path.join(self.path, file_name), 'r'))
+        train_data = json.load(open(join(self.path, file_name), 'r'))
 
         train_data = self.check_data(train_data)
         random.shuffle(train_data)

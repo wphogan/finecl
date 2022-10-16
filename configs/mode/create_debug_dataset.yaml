@@ -1,8 +1,0 @@
-# @package _global_
-
-# run in experiment mode with:
-# `python run.py mode=exp name=experiment_name`
-
-create_debug_dataset_mode: True
-preprocess_mode: False
-experiment_mode: False

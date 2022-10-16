@@ -22,7 +22,7 @@ class EntityMarker():
 
     def __init__(self, config=None):
 
-        self.tokenizer = RobertaTokenizer.from_pretrained(config.trainer.model_name_or_path)
+        self.tokenizer = RobertaTokenizer.from_pretrained(config.model_name_or_path)
 
         self.h_pattern = re.compile("\* h \*")
         self.t_pattern = re.compile("\^ t \^")

@@ -1,4 +1,0 @@
-_target_: src.models.roberta.roberta_model.RobertaModel
-
-#lr: 0.001
-#weight_decay: 0.0005

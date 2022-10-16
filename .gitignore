@@ -5,6 +5,8 @@ dist/
 data/
 pretrained_models/
 .DS_Store
+.idea/
+venv/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

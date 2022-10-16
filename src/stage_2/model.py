@@ -11,7 +11,7 @@ def mask_tokens(inputs, tokenizer, not_mask_pos=None):
         )
 
     labels = inputs.clone()
-    # We sample a few tokens in each sequence for masked-LM training (with probability args.mlm_probability defaults to 0.15 in Bert/RoBERTa)
+    # We sample a few tokens in each sequence for masked-LM training (with probability config.mlm_probability defaults to 0.15 in Bert/RoBERTa)
     probability_matrix = torch.full(labels.shape, 0.15)
     special_tokens_mask = [
         tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()
@@ -144,16 +144,16 @@ class NTXentLoss_wiki(nn.Module):
         return 0
 
 class CP_R(nn.Module):
-    def __init__(self, args):
+    def __init__(self, config):
         super(CP_R, self).__init__()
-        self.model = EricaRobertaForMaskedLM.from_pretrained(args.bert_model)
-        self.tokenizer = RobertaTokenizer.from_pretrained(args.bert_model)
-        self.args = args
-        self.ntxloss_doc = NTXentLoss_doc(temperature=args.temperature)
-        self.ntxloss_wiki = NTXentLoss_wiki(temperature=args.temperature)
+        self.model = EricaRobertaForMaskedLM.from_pretrained(config.trainer.bert_model)
+        self.tokenizer = RobertaTokenizer.from_pretrained(config.trainer.bert_model)
+        self.config = config
+        self.ntxloss_doc = NTXentLoss_doc(temperature=config.trainer.temperature)
+        self.ntxloss_wiki = NTXentLoss_wiki(temperature=config.trainer.temperature)
 
     def get_doc_loss(self, context_idxs, h_mapping, t_mapping, relation_label, relation_label_idx, relation_weights, context_masks, rel_mask_pos, rel_mask_neg, pos_num, mlm_mask):
-        if self.args.doc_loss and relation_label_idx.size()[0]>0:
+        if self.config.trainer.doc_loss and relation_label_idx.size()[0]>0:
             
             m_input, m_labels = mask_tokens(context_idxs.cpu(), self.tokenizer, mlm_mask.cpu())
             m_outputs = self.model(input_ids=m_input, masked_lm_labels=m_labels, attention_mask=context_masks)
@@ -198,7 +198,7 @@ class CP_R(nn.Module):
         m_loss = m_outputs[1]
         context_output = m_outputs[0]
 
-        if self.args.wiki_loss == 1 and relation_label_idx.size()[0]>0:
+        if self.config.trainer.wiki_loss == 1 and relation_label_idx.size()[0]>0:
             query_re_output = torch.matmul(query_mapping.unsqueeze(dim = 1), context_output)
             query_re_output = query_re_output.squeeze(dim = 1)
             start_re_output = torch.matmul(h_mapping, context_output)

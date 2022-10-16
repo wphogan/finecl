@@ -22,20 +22,20 @@ class REModel(nn.Module):
 
         scale = 2 if config.trainer.entity_marker else 1
         self.rel_fc = nn.Linear(config.trainer.hidden_size * scale, config.trainer.rel_num)
-        if 'bert-base-uncased' == config.trainer.model_name_or_path:
-            self.bert = BertModel.from_pretrained(config.trainer.model_name_or_path)
-            if config.trainer.pretrained_model_path != "None":
-                print("********* load from ckpt/" + config.trainer.pretrained_model_path + " ***********")
-                ckpt = torch.load(config.trainer.pretrained_model_path)
+        if 'bert-base-uncased' == config.model_name_or_path:
+            self.bert = BertModel.from_pretrained(config.model_name_or_path)
+            if config.pretrained_model_path != "None":
+                print("********* load from ckpt/" + config.pretrained_model_path + " ***********")
+                ckpt = torch.load(config.pretrained_model_path)
                 self.bert.load_state_dict(ckpt["bert-base"])
             else:
                 print("*******No ckpt to load, Let's use bert base!*******")
-        elif 'roberta-base' == config.trainer.model_name_or_path:
-            self.bert = RobertaModel.from_pretrained(config.trainer.model_name_or_path,
+        elif 'roberta-base' == config.model_name_or_path:
+            self.bert = RobertaModel.from_pretrained(config.model_name_or_path,
                                                      hidden_dropout_prob=config.trainer.dropout)
-            if config.trainer.pretrained_model_path != "None":
-                print("********* load from ckpt/" + config.trainer.pretrained_model_path + " ***********")
-                ckpt = torch.load(config.trainer.pretrained_model_path)
+            if config.pretrained_model_path != "None":
+                print("********* load from ckpt/" + config.pretrained_model_path + " ***********")
+                ckpt = torch.load(config.pretrained_model_path)
                 self.bert.load_state_dict(ckpt["bert-base"])
             else:
                 print("*******No ckpt to load, Let's use bert base!*******")

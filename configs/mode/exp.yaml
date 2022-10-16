@@ -4,9 +4,7 @@
 # `python run.py mode=exp name=experiment_name`
 
 experiment_mode: True
-create_debug_dataset_mode: False
 preprocess_mode: False
-create_high_qual_training_set_mode: False
 
 
 # allows for custom naming of the experiment

@@ -4,8 +4,6 @@
 
 default_mode: True
 preprocess_mode: False
-create_debug_dataset_mode: False
-create_high_qual_training_set_mode: False
 
 
 hydra:

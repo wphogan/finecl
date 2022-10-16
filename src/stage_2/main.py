@@ -148,11 +148,12 @@ def train(config, model, train_dataset, checkpoint_path):
                         os.mkdir(checkpoint_path + config.trainer.save_dir)
 
                     ckpt = {
-                        'bert-base': model.module.model.roberta.state_dict(),
-                        'model': model.module.state_dict(),
+                        'bert-base': model.model.roberta.state_dict(),
+                        'model': model.state_dict(),
                         'optimizer_state_dict': optimizer.state_dict(),
                         'scheduler_state_dict': scheduler.state_dict(),
                     }
+
                     if global_step > 100:
                         torch.save(ckpt, os.path.join(checkpoint_path + config.trainer.save_dir,
                                                       "ckpt_of_step_" + str(global_step)))

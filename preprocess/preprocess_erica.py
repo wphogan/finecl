@@ -1,8 +1,11 @@
-import numpy as np
-import os
 import json
-from src.transformers import BertTokenizer, RobertaTokenizer
+import os
 import random
+from os.path import join
+
+import numpy as np
+
+from src.transformers import BertTokenizer, RobertaTokenizer
 
 MODEL_CLASSES = {
     'bert': BertTokenizer,
@@ -145,15 +148,12 @@ rel2id = {"P1464": 0, "P150": 1, "P1792": 2, "P1151": 3, "P194": 4, "P1791": 5, 
 
 
 def preprocess_erica(config):
-    raise Exception('Need to change _bert_.npy file names to same either bert or roberta tokens')
-    output_dir = config.data_dir + '_preprocessed'
-    max_seq_length = config.max_seq_length
-    json.dump(rel2id, open(os.path.join(output_dir, 'rel2id.json'), "w"))  # TODO: NOTE -- only need this once
-
     assert (config.model_type in ['bert', 'roberta'])
+    output_dir = join(config.data_dir, 'erica_data')
+    if not os.path.exists(output_dir): os.makedirs(output_dir)
 
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+    max_seq_length = config.max_seq_length
+    json.dump(rel2id, open(join(output_dir, 'rel2id.json'), "w"))
 
     n_files = 10
     file_types = []
@@ -166,106 +166,26 @@ def preprocess_erica(config):
     tokenizer = MODEL_CLASSES[config.model_type].from_pretrained(config.model_name_or_path,
                                                                  do_lower_case=config.do_lower_case)
 
-    def save_data_format(ori_data, is_training, start_uid):
-        data = []
-        uid = start_uid
-        for i in range(len(ori_data)):
-            Ls = [0]
-            L = 0
-            for x in ori_data[i]['sents']:
-                L += len(x)
-                Ls.append(L)
-
-            vertexSet = ori_data[i]['vertexSet']
-            # point position added with sent start position
-            for j in range(len(vertexSet)):
-                for k in range(len(vertexSet[j])):
-                    vertexSet[j][k]['sent_id'] = int(vertexSet[j][k]['sent_id'])
-
-                    sent_id = vertexSet[j][k]['sent_id']
-                    dl = Ls[sent_id]
-                    pos1 = vertexSet[j][k]['pos'][0]
-                    pos2 = vertexSet[j][k]['pos'][1]
-                    vertexSet[j][k]['pos'] = (pos1 + dl, pos2 + dl)
-
-            ori_data[i]['vertexSet'] = vertexSet
-
-            item = {}
-            item['vertexSet'] = vertexSet
-            labels = ori_data[i].get('labels', [])
-
-            train_triple = set([])
-            new_labels = []
-            for label in labels:
-                rel = label['r']
-                try:
-                    assert rel in rel2id
-                except:
-                    raise ValueError('rel not in rel2id dict!')
-                label['r'] = rel2id[label['r']]
-                label['uid'] = uid
-                uid += 1
-
-                train_triple.add((label['h'], label['t']))
-
-                label['in_annotated_train'] = False
-
-                if is_training:
-                    for n1 in vertexSet[label['h']]:
-                        for n2 in vertexSet[label['t']]:
-                            fact_in_annotated_train.add((n1['name'], n2['name'], rel))
-                else:
-                    for n1 in vertexSet[label['h']]:
-                        for n2 in vertexSet[label['t']]:
-                            if (n1['name'], n2['name'], rel) in fact_in_annotated_train:
-                                label['in_annotated_train'] = True
-
-                new_labels.append(label)
-
-            item['labels'] = new_labels
-            # item['title'] = ori_data[i]['title'] # NOT USED IN TRAINING DATA
-
-            na_triple = []
-            for j in range(len(vertexSet)):
-                for k in range(len(vertexSet)):
-                    if (j != k):
-                        if (j, k) not in train_triple:
-                            na_triple.append((j, k))
-
-            item['na_triple'] = na_triple
-            item['Ls'] = Ls
-            item['sents'] = ori_data[i]['sents']
-            data.append(item)
-        end_uid = uid
-        return data, end_uid
-
-    def init(data_file_name, rel2id, config, max_seq_length=max_seq_length, is_training=True, suffix='', start_uid=0):
-        ori_data = json.load(open(data_file_name))
+    def init(data_file_name, config, max_seq_length=max_seq_length, is_training=True, suffix=''):
+        data = json.load(open(data_file_name))
 
         if config.ratio < 1 and suffix == 'train':
-            random.shuffle(ori_data)
-            print(len(ori_data))
-            ori_data = ori_data[: int(config.ratio * len(ori_data))]
-            print(len(ori_data))
+            random.shuffle(data)
+            print(len(data))
+            data = data[: int(config.ratio * len(data))]
+            print(len(data))
 
-        data, end_uid = save_data_format(ori_data, is_training, start_uid)
         print('data_len:', len(data))
 
-        print("Saving files")
-        if config.ratio < 1 and suffix == 'train':
-            json.dump(data, open(os.path.join(output_dir, suffix + '_' + str(config.ratio) + '.json'), "w"))
-        else:
-            json.dump(data, open(os.path.join(output_dir, suffix + '.json'), "w"))
-
-        sen_tot = len(ori_data)
+        sen_tot = len(data)
         bert_token = np.zeros((sen_tot, max_seq_length), dtype=np.int64)
         bert_mask = np.zeros((sen_tot, max_seq_length), dtype=np.int64)
         bert_starts_ends = np.ones((sen_tot, max_seq_length, 2), dtype=np.int64) * (max_seq_length - 1)
 
         if config.model_type == 'bert':
 
-            for i in range(len(ori_data)):
-                item = ori_data[i]
+            for i in range(len(data)):
+                item = data[i]
                 tokens = []
                 for sent in item['sents']:
                     tokens += sent
@@ -291,8 +211,8 @@ def preprocess_erica(config):
                 bert_starts_ends[i, :len(subword_lengths), 0] = token_start_idxs
                 bert_starts_ends[i, :len(subword_lengths), 1] = token_end_idxs
         else:
-            for i in range(len(ori_data)):
-                item = ori_data[i]
+            for i in range(len(data)):
+                item = data[i]
                 words = []
                 for sent in item['sents']:
                     words += sent
@@ -346,14 +266,20 @@ def preprocess_erica(config):
                 bert_mask[i] = mask
 
                 for j in range(len(words)):
-                    idx = char2subwords[idxs[j]] + 1
+                    if idxs[j] > len(char2subwords):
+                        idx = max_seq_length - 1
+                    else:
+                        idx = char2subwords[idxs[j]] + 1
                     idx = min(idx, max_seq_length - 1)
 
                     x = idxs[j] + len(words[j])
                     if x == len(char2subwords):
                         idx2 = L_ori
                     else:
-                        idx2 = char2subwords[x] + 1
+                        if x > len(char2subwords):
+                            idx2 = max_seq_length - 1
+                        else:
+                            idx2 = char2subwords[x] + 1
                         idx2 = min(idx2, max_seq_length - 1)
 
                     bert_starts_ends[i][j][0] = idx
@@ -361,22 +287,17 @@ def preprocess_erica(config):
 
         print("Finishing processing")
         if config.ratio < 1 and suffix == 'train':
-            np.save(os.path.join(output_dir, suffix + '_' + str(config.ratio) + '_bert_token.npy'), bert_token)
-            np.save(os.path.join(output_dir, suffix + '_' + str(config.ratio) + '_bert_mask.npy'), bert_mask)
-            np.save(os.path.join(output_dir, suffix + '_' + str(config.ratio) + '_bert_starts_ends.npy'),
+            np.save(join(output_dir, suffix + '_' + str(config.ratio) + f'_{config.model_type}_token.npy'), bert_token)
+            np.save(join(output_dir, suffix + '_' + str(config.ratio) + f'_{config.model_type}_mask.npy'), bert_mask)
+            np.save(join(output_dir, suffix + '_' + str(config.ratio) + f'_{config.model_type}_starts_ends.npy'),
                     bert_starts_ends)
         else:
-            np.save(os.path.join(output_dir, suffix + '_bert_token.npy'), bert_token)
-            np.save(os.path.join(output_dir, suffix + '_bert_mask.npy'), bert_mask)
-            np.save(os.path.join(output_dir, suffix + '_bert_starts_ends.npy'), bert_starts_ends)
+            np.save(join(output_dir, suffix + f'_{config.model_type}_token.npy'), bert_token)
+            np.save(join(output_dir, suffix + f'_{config.model_type}_mask.npy'), bert_mask)
+            np.save(join(output_dir, suffix + f'_{config.model_type}_starts_ends.npy'), bert_starts_ends)
         print("Finish saving")
 
-        return end_uid
-
-    start_uid = 0
     for file_type in file_types:
-        print(f'{file_type} start UID: ', start_uid)
         is_training = ('train' in file_type)
-        file_name = os.path.join(config.data_dir, f'{file_type}.json')
-        start_uid += init(file_name, rel2id, config, max_seq_length=max_seq_length, is_training=is_training,
-                          suffix=file_type, start_uid=start_uid)
+        file_name = join(config.data_dir, 'erica_data', f'{file_type}.json')
+        init(file_name, config, max_seq_length=max_seq_length, is_training=is_training, suffix=file_type)

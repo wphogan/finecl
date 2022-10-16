@@ -169,10 +169,10 @@ def train(config, model, train_dataloader, dev_dataloader, test_dataloader, dual
             elif config.trainer.dataset == "wiki80" or config.trainer.dataset == "chemprot":
                 eval_func = eval_ACC
 
-            score = eval_func(model, dev_dataloader)
+            score = eval_func(config, model, dev_dataloader)
             if score > best_dev_score:
                 best_dev_score = score
-                best_test_score = eval_func(model, test_dataloader)
+                best_test_score = eval_func(config, model, test_dataloader)
                 logging("Best Dev score: %.3f,\tTest score: %.3f" % (best_dev_score, best_test_score))
             else:
                 logging("Dev score: %.3f" % score)
@@ -181,17 +181,17 @@ def train(config, model, train_dataloader, dev_dataloader, test_dataloader, dual
     logging("@RESULT: " + config.trainer.dataset + " Test score is %.3f" % best_test_score)
 
     # File name settings:
-    model_name = config.trainer.model_name_or_path
+    model_name = config.model_name_or_path
     fname_out = f're_{config.trainer.dataset}_{model_name}_{str(config.trainer.train_prop)}_{config.trainer.seed}_{best_test_score:.3f}.log'
 
     f = open(os.path.join(os.getcwd(), fname_out), 'a+')
-    if config.trainer.pretrained_model_path == "None":
+    if config.pretrained_model_path == "None":
         f.write("bert-base\t" + config.trainer.dataset + "\t" + str(
             config.trainer.train_prop) + "\t" + config.trainer.mode + "\t" + "seed:" + str(
             config.trainer.seed) + "\t" + "max_epoch:" + str(config.trainer.max_epoch) + "\t" + str(
             time.ctime()) + "\n")
     else:
-        f.write(config.trainer.pretrained_model_path + "\t" + config.trainer.dataset + "\t" + str(
+        f.write(config.pretrained_model_path + "\t" + config.trainer.dataset + "\t" + str(
             config.trainer.train_prop) + "\t" + config.trainer.mode + "\t" + "seed:" + str(
             config.trainer.seed) + "\t" + "max_epoch:" + str(config.trainer.max_epoch) + "\t" + str(
             time.ctime()) + "\n")
@@ -224,7 +224,7 @@ def eval_F1(config, model, dataloader):
     return f1
 
 
-def eval_ACC(model, dataloader):
+def eval_ACC(config, model, dataloader):
     tot = 0.0
     crr = 0.0
     for batch in dataloader:

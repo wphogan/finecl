@@ -26,10 +26,10 @@ class EntityMarker():
 
     def __init__(self, config=None):
         self.config = config
-        if config.trainer.model_name_or_path == 'bert-base-uncased':
-            self.tokenizer = BertTokenizer.from_pretrained(config.trainer.model_name_or_path)
-        elif config.trainer.model_name_or_path == 'roberta-base':
-            self.tokenizer = RobertaTokenizer.from_pretrained(config.trainer.model_name_or_path)
+        if config.model_name_or_path == 'bert-base-uncased':
+            self.tokenizer = BertTokenizer.from_pretrained(config.model_name_or_path)
+        elif config.model_name_or_path == 'roberta-base':
+            self.tokenizer = RobertaTokenizer.from_pretrained(config.model_name_or_path)
         else:
             raise ValueError('base model is not recognized.')
         self.h_pattern = re.compile("\* h \*")
@@ -40,9 +40,9 @@ class EntityMarker():
 
     def tokenize(self, raw_text, h_pos_li, t_pos_li, h_type=None, t_type=None, h_blank=False, t_blank=False,
                  single=True):
-        if self.config.trainer.model_name_or_path == 'bert-base-uncased':
+        if self.config.model_name_or_path == 'bert-base-uncased':
             return self.tokenize_bert(raw_text, h_pos_li, t_pos_li, h_type, t_type, h_blank, t_blank, single)
-        elif self.config.trainer.model_name_or_path == 'roberta-base':
+        elif self.config.model_name_or_path == 'roberta-base':
             return self.tokenize_roberta(raw_text, h_pos_li, t_pos_li, h_type, t_type, h_blank, t_blank, single)
 
     def tokenize_roberta(self, raw_text, h_pos_li, t_pos_li, h_type=None, t_type=None, h_blank=False, t_blank=False,

@@ -4,7 +4,7 @@ botocore==1.24.5
 config==0.5.1
 filelock==3.3.2
 ftfy==6.1.1
-h5py==2.10.0
+gdown==4.5.1
 hydra-core==1.1.0
 hydra-colorlog==1.2.0
 jieba==0.42.1
@@ -25,7 +25,8 @@ scipy==1.7.2
 sentencepiece==0.1.96
 six==1.16.0
 spacy==3.3.1
-tokenizers==0.5.0
+torch==1.4.0
+transformers==2.5.0
 tqdm==4.62.3
 uvicorn==0.18.1
 wandb==0.12.6

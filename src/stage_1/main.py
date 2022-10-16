@@ -13,6 +13,7 @@ import torch.nn as nn
 import matplotlib.pyplot as plt
 from datetime import date, datetime
 from collections import defaultdict
+from apex import amp
 from torch.optim.lr_scheduler import LambdaLR
 from src.transformers import (AdamW, BertModel, RobertaModel)
 from torch.utils.data import DataLoader, RandomSampler, SequentialSampler
@@ -56,12 +57,12 @@ class NpEncoder(json.JSONEncoder):
         return super(NpEncoder, self).default(obj)
 
 
-class MyDataset():
+class REDataset():
     def __init__(self, prefix, data_path, h_t_limit, config):
         self.h_t_limit = h_t_limit
-        if config.trainer.use_erica_data:
-            assert config.trainer.training_data_type == 'distant'
-            self.data_path = config.trainer.prepro_erica_training_data_dir
+        if config.use_erica_data:
+            assert config.training_data_type == 'distant'
+            self.data_path = config.prepro_erica_training_data_dir
         else:
             self.data_path = data_path
 
@@ -69,42 +70,37 @@ class MyDataset():
             self.train_file = json.load(
                 open(os.path.join(self.data_path, prefix + '_' + str(config.trainer.ratio) + '.json')))
             self.data_train_bert_token = np.load(os.path.join(self.data_path, prefix + '_' + str(
-                config.trainer.ratio) + f'_{config.trainer.model_type}_token.npy'))
+                config.trainer.ratio) + f'_{config.model_type}_token.npy'))
             self.data_train_bert_mask = np.load(os.path.join(self.data_path, prefix + '_' + str(
-                config.trainer.ratio) + f'_{config.trainer.model_type}_mask.npy'))
+                config.trainer.ratio) + f'_{config.model_type}_mask.npy'))
             self.data_train_bert_starts_ends = np.load(os.path.join(self.data_path, prefix + '_' + str(
-                config.trainer.ratio) + f'_{config.trainer.model_type}_starts_ends.npy'))
+                config.trainer.ratio) + f'_{config.model_type}_starts_ends.npy'))
         else:
             train_fname = ''  # placeholder
             if prefix == 'train':
                 if 'docred_' not in self.data_path:  # data from ERICA repo has different name for annotated data
-                    assert not config.trainer.use_high_quality_training_data  # HQ data not in docred_roberta
-                    prefix = prefix + '_' + config.trainer.training_data_type  # use distant OR annotated training data
+                    prefix = prefix + '_' + config.training_data_type  # use distant OR annotated training data
 
-                if config.trainer.reduced_data:
-                    prefix = prefix + '_' + str(config.trainer.train_prop)
+                if config.reduced_data:
+                    prefix = prefix + '_' + str(config.train_prop)
 
                 # Logic to load numbered ERICA train_distant data files
-                if config.trainer.use_erica_data and config.trainer.training_data_type == 'distant':
-                    prefix = prefix + '_' + str(config.trainer.erica_file_num)
+                if config.use_erica_data and config.training_data_type == 'distant':
+                    prefix = prefix + '_' + str(config.erica_file_num)
 
                 train_fname = os.path.join(self.data_path, prefix + '.json')
-            if config.trainer.use_high_quality_training_data:
-                n_epoch = config.trainer.n_epochs_high_quality_data
-                train_fname = os.path.join(config.trainer.data_path_high_quality,
-                                           f'train_distant_high_quality_n{n_epoch}.json')
-                print(f'----LOADING HIGH QUALITY TRAINING DATA: DATA EPOCHS={n_epoch}!!!----')
+
 
             print('Training file: ', train_fname)
             self.train_file = json.load(open(train_fname))
 
-            print(f'Preprocessed files: {self.data_path}, {prefix}, {config.trainer.model_type}')
+            print(f'Preprocessed files: {self.data_path}, {prefix}, {config.model_type}')
             self.data_train_bert_token = np.load(
-                os.path.join(self.data_path, prefix + f'_{config.trainer.model_type}_token.npy'))
+                os.path.join(self.data_path, prefix + f'_{config.model_type}_token.npy'))
             self.data_train_bert_mask = np.load(
-                os.path.join(self.data_path, prefix + f'_{config.trainer.model_type}_mask.npy'))
+                os.path.join(self.data_path, prefix + f'_{config.model_type}_mask.npy'))
             self.data_train_bert_starts_ends = np.load(
-                os.path.join(self.data_path, prefix + f'_{config.trainer.model_type}_starts_ends.npy'))
+                os.path.join(self.data_path, prefix + f'_{config.model_type}_starts_ends.npy'))
 
     def __getitem__(self, index):
         return self.train_file[index], self.data_train_bert_token[index], \
@@ -144,23 +140,23 @@ class Controller(object):
         self.config = config
         self.max_seq_length = config.trainer.max_seq_length
         self.relation_num = 97
-        self.max_epoch = config.trainer.num_train_epochs
+        self.max_epoch = config.num_train_epochs
         self.evaluate_during_training_epoch = config.trainer.evaluate_during_training_epoch
         self.log_period = config.trainer.logging_steps
         self.neg_multiple = 3  # The number of negative examples sampled is three times that of positive examples
         self.warmup_ratio = 0.1
-        self.training_data_type = config.trainer.training_data_type
+        self.training_data_type = config.training_data_type
 
-        self.data_path = config.trainer.prepro_data_dir
+        self.data_path = config.prepro_data_dir
         self.use_docred_from_erica_authors = ('docred_' in self.data_path)
         # if debug mode, load debug data and reduce epochs
         if config.debug_mode:
             self.data_path = os.path.join(config.data_dir, 'DocRED_debug_preprocessed')
-            self.max_epoch = config.trainer.num_train_epochs_debug
+            self.max_epoch = config.num_train_epochs_debug
         print('Loading dev/test data from ', self.data_path)
 
-        if config.trainer.use_erica_data:
-            print('Loading training data from ', config.trainer.prepro_erica_training_data_dir)
+        if config.use_erica_data:
+            print('Loading training data from ', config.prepro_erica_training_data_dir)
             self.relation_num = 1040  # number of rel classes in ERICA pretrain data
         else:
             print('Loading training data from ', self.data_path)
@@ -196,10 +192,8 @@ class Controller(object):
         self.checkpoint_dir = os.path.join(os.getcwd(), 'ce_checkpoint')
         self.fig_result_dir = os.path.join(os.getcwd(), 'ce_fig_result')
         self.log_dir = os.path.join(os.getcwd(), 'ce_log')
-
-        n_hq_epochs = config.trainer.n_epochs_high_quality_data
         self.best_model_path = os.path.join(self.checkpoint_dir,
-                                            f"{self.config.trainer.model_type}_best_n{n_hq_epochs}.bin")
+                                            f"{self.config.model_type}_best.bin")
 
         if not os.path.exists(self.log_dir):
             os.mkdir(self.log_dir)
@@ -219,34 +213,38 @@ class Controller(object):
                 if not os.path.exists(self.dir_dev_preds): os.mkdir(self.dir_dev_preds)
 
         # QA for the runs
-        if config.trainer.ignore_dev_set:
-            assert config.trainer.training_data_type == 'distant'
-            assert not config.trainer.load_pretrained_checkpoint
+        if config.ignore_dev_set:
+            assert config.training_data_type == 'distant'
+            assert not config.load_pretrained_checkpoint
 
     def load_data(self):
         self.rel2id = json.load(open(os.path.join(self.data_path, 'rel2id.json')))
         self.id2rel = {v: k for k, v in self.rel2id.items()}
 
-        prefix = self.test_prefix
-        self.is_test = ('test' == prefix)
-        self.test_file = json.load(open(os.path.join(self.data_path, prefix + '.json')))
+        if self.config.use_erica_data and self.config.training_data_type == 'distant':
+            prefix = 'train_distant_' + str(self.config.erica_file_num)
+            self.data_file = json.load(open(os.path.join(self.data_path, prefix + '.json')))
+        else:
+            prefix = self.test_prefix
+            self.is_test = ('test' == prefix)
+            self.data_file = json.load(open(os.path.join(self.data_path, prefix + '.json')))
 
-        self.data_test_bert_token = np.load(
-            os.path.join(self.data_path, prefix + f'_{self.config.trainer.model_type}_token.npy'))
-        self.data_test_bert_mask = np.load(
-            os.path.join(self.data_path, prefix + f'_{self.config.trainer.model_type}_mask.npy'))
-        self.data_test_bert_starts_ends = np.load(
-            os.path.join(self.data_path, prefix + f'_{self.config.trainer.model_type}_starts_ends.npy'))
+        self.data_bert_token = np.load(
+            os.path.join(self.data_path, prefix + f'_{self.config.model_type}_token.npy'))
+        self.data_bert_mask = np.load(
+            os.path.join(self.data_path, prefix + f'_{self.config.model_type}_mask.npy'))
+        self.data_bert_starts_ends = np.load(
+            os.path.join(self.data_path, prefix + f'_{self.config.model_type}_starts_ends.npy'))
 
-        self.test_len = self.data_test_bert_token.shape[0]
-        assert (self.test_len == len(self.test_file))
+        self.data_len = self.data_bert_token.shape[0]
+        assert (self.data_len == len(self.data_file))
 
-        self.test_batches = self.data_test_bert_token.shape[0] // self.test_batch_size
-        if self.data_test_bert_token.shape[0] % self.test_batch_size != 0:
+        self.test_batches = self.data_bert_token.shape[0] // self.test_batch_size
+        if self.data_bert_token.shape[0] % self.test_batch_size != 0:
             self.test_batches += 1
 
-        self.test_order = list(range(self.test_len))
-        self.test_order.sort(key=lambda x: np.sum(self.data_test_bert_token[x] > 0), reverse=True)
+        self.test_order = list(range(self.data_len))
+        self.test_order.sort(key=lambda x: np.sum(self.data_bert_token[x] > 0), reverse=True)
 
     def get_test_batch(self):
         context_idxs = torch.LongTensor(self.test_batch_size, self.max_seq_length).to(self.device)
@@ -262,7 +260,7 @@ class Controller(object):
 
         for b in range(self.test_batches):
             start_id = b * self.test_batch_size
-            cur_bsz = min(self.test_batch_size, self.test_len - start_id)
+            cur_bsz = min(self.test_batch_size, self.data_len - start_id)
             cur_batch = list(self.test_order[start_id: start_id + cur_bsz])
 
             for mapping in [h_mapping, t_mapping, relation_mask]:
@@ -285,13 +283,13 @@ class Controller(object):
             all_test_idxs_2 = []
             all_test_idxs_multi = []
             for i, index in enumerate(cur_batch):
-                context_idxs[i].copy_(torch.from_numpy(self.data_test_bert_token[index, :]))
-                context_masks[i].copy_(torch.from_numpy(self.data_test_bert_mask[index, :]))
+                context_idxs[i].copy_(torch.from_numpy(self.data_bert_token[index, :]))
+                context_masks[i].copy_(torch.from_numpy(self.data_bert_mask[index, :]))
 
                 idx2label = defaultdict(list)
-                ins = self.test_file[index]
-                starts_pos = self.data_test_bert_starts_ends[index, :, 0]
-                ends_pos = self.data_test_bert_starts_ends[index, :, 1]
+                ins = self.data_file[index]
+                starts_pos = self.data_bert_starts_ends[index, :, 0]
+                ends_pos = self.data_bert_starts_ends[index, :, 1]
                 trip2uid = {}
                 for label in ins['labels']:
                     idx2label[(label['h'], label['t'])].append(label['r'])
@@ -554,7 +552,7 @@ class Controller(object):
         Function used to evaluate entire training set after each epoch.
         e.g. "Epoch-based" learning order verus "Batch-based" learning order
         '''
-        train_dataset = MyDataset(self.train_prefix, self.data_path, self.h_t_limit, config)
+        train_dataset = REDataset(self.train_prefix, self.data_path, self.h_t_limit, config)
         train_sampler = RandomSampler(train_dataset)
         train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=self.batch_size,
                                       collate_fn=self.get_train_batch, num_workers=2)
@@ -618,16 +616,16 @@ class Controller(object):
 
     def train(self, model_type, model_name_or_path, save_name, config):
         self.load_data()
-        train_dataset = MyDataset(self.train_prefix, self.data_path, self.h_t_limit, config)
+        train_dataset = REDataset(self.train_prefix, self.data_path, self.h_t_limit, config)
         train_sampler = RandomSampler(train_dataset)
         train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=self.batch_size,
                                       collate_fn=self.get_train_batch, num_workers=2)
         bert_model = MODEL_CLASSES[model_type].from_pretrained(model_name_or_path)
 
-        if config.trainer.load_pretrained_checkpoint:
-            assert config.trainer.training_data_type == 'annotated'
-            print("Path to checkpoint: ", config.trainer.pretrain_checkpoint)
-            ckpt = torch.load(config.trainer.pretrain_checkpoint)
+        if config.load_pretrained_checkpoint:
+            assert config.training_data_type == 'annotated'
+            print("Path to checkpoint: ", config.pretrain_checkpoint)
+            ckpt = torch.load(config.pretrain_checkpoint)
             bert_model.load_state_dict(ckpt["bert-base"])
 
         model = REModel(config=self, bert_model=bert_model)
@@ -640,6 +638,7 @@ class Controller(object):
             {'params': [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
         ]
         optimizer = AdamW(optimizer_grouped_parameters, lr=self.lr, eps=self.config.trainer.adam_epsilon)
+        model, optimizer = amp.initialize(model, optimizer, opt_level="O1")
         if self.config.debug_mode:
             tot_step = 10
             print('debug mode is active...')
@@ -735,7 +734,7 @@ class Controller(object):
                 loss.backward()
                 relation_label = relation_label.data.cpu().numpy()
 
-                if not config.trainer.epoch_based_learning_order:
+                if not config.epoch_based_learning_order:
                     for i in range(output.shape[0]):
                         for j in range(output.shape[1]):
                             label = relation_label[i][j]
@@ -772,15 +771,15 @@ class Controller(object):
                 step += 1
                 # END BATCH LOOP
 
-            # Every epoch, save learned TRAIN trips
-            if config.trainer.epoch_based_learning_order:
+            # Every epoch, save learned TRAIN trips (distantly labeled data only)
+            if config.epoch_based_learning_order:
                 new_all_learned = self.eval_train(model, epoch, config, all_learned_train)
                 all_learned_train.update(new_all_learned)
-            else:
+            elif config.training_data_type == 'distant':
                 self.save_first_learned(learned_this_epoch, epoch)  # save training first learned
 
-            # Every epoch, save learned DEV trips
-            if not config.trainer.use_erica_data and epoch > 0.7 * self.max_epoch:
+            # Assess dev performance
+            if not config.use_erica_data and epoch > 0.5 * self.max_epoch:
                 logging('-' * 89)
                 model.eval()
                 logging('Dev set evaluation:')
@@ -791,8 +790,8 @@ class Controller(object):
                     all_learned_uids=all_learned_dev)  # save dev first learned
 
                 # Save best pretraining model:
-                if config.trainer.ignore_dev_set and epoch == self.max_epoch - 1:  # last epoch
-                    assert config.trainer.training_data_type == 'distant'
+                if config.ignore_dev_set and epoch == self.max_epoch - 1:  # last epoch
+                    assert config.training_data_type == 'distant'
                     logging('Recording END model.')
                     best_all_f1_d = all_f1_d
                     best_result = {'dev': [all_f1_d, test_f1_d, ign_f1_d, f1_d, auc_d, input_theta_dev]}
@@ -845,14 +844,13 @@ class Controller(object):
         print('Logs saved: ', self.log_dir)
 
     def save_first_learned(self, first_learned, epoch):
-        if self.config.trainer.training_data_type == 'annotated': return
-        if self.config.trainer.use_high_quality_training_data: return  # Do not save UIDs when training on HQ data
+        if self.config.training_data_type == 'annotated': return
         first_learned[epoch] = list(first_learned[epoch])
         int_epoch = int(epoch)
 
         # Full training eval aka Epoch-based:
         postfix = ''
-        if 'train' in self.test_prefix and self.config.trainer.epoch_based_learning_order:
+        if 'train' in self.test_prefix and self.config.epoch_based_learning_order:
             postfix = '_whole'
 
         # Set correct save directory
@@ -865,9 +863,8 @@ class Controller(object):
             print('complete.')
 
     def save_predictions(self, preds, epoch):
-        if self.config.trainer.training_data_type == 'annotated': return
+        if self.config.training_data_type == 'annotated': return
         list_preds = defaultdict(list)
-        int_epoch = int(epoch)
         for tupl in preds[epoch]:
             list_preds[epoch].append(list(tupl))
 
@@ -883,7 +880,7 @@ class Controller(object):
              target_dir=None, output_embeddings=False, just_return_theta=False):
         rel_code2rel_id = json.load(open(f'{self.data_path}/rel2id.json'))
         rel_id2rel_code = {v: k for k, v in rel_code2rel_id.items()}  # invert rel2id dict
-        rel_code2txt = json.load(open(f'{self.data_path}/../DocRED/rel_info.json'))
+        rel_code2txt = json.load(open(f'{self.data_path}/../docred/rel_info.json'))
 
         all_rel_embeddings, all_rel_embeddings_labels = [], []
         learned_this_epoch = defaultdict(set)
@@ -1092,8 +1089,7 @@ class Controller(object):
         if output:
             output = [{'index': x[-4], 'h_idx': x[-3], 't_idx': x[-2], 'r_idx': x[-1], 'r': x[-5], 'title': x[-6]} for x
                       in test_result[:w + 1]]
-            n_epochs = self.config.trainer.n_epochs_high_quality_data
-            out_file = save_name + "_" + self.test_prefix + f'_index_n{n_epochs}_{str(input_theta)}theta.json'
+            out_file = save_name + "_" + self.test_prefix + f'_{str(input_theta)}theta.json'
             if target_dir:  # save results in the original experiment folder
                 out_file = os.path.join(target_dir, out_file)
             json.dump(output, open(out_file, "w"))
@@ -1164,10 +1160,10 @@ class Controller(object):
         for i in range(10):
             confidence_vals = {}
             self.test_prefix = f'train_distant_{i}'
-            self.config.trainer.erica_file_num = i
+            self.config.erica_file_num = i
 
             self.load_data()
-            train_dataset = MyDataset(self.train_prefix, self.data_path, self.h_t_limit, self.config)
+            train_dataset = REDataset(self.train_prefix, self.data_path, self.h_t_limit, self.config)
             train_sampler = RandomSampler(train_dataset)
             train_dataloader = DataLoader(train_dataset, sampler=train_sampler, batch_size=32,
                                           collate_fn=self.get_train_batch, num_workers=0)
@@ -1224,14 +1220,12 @@ class Controller(object):
         self.get_confidence(model)
 
     def test(self, model_type, model_name_or_path, save_name, input_theta, best_model_path, target_dir):
-        print(
-            f'NEW THETA EXPERIMENT: evaluating {model_type}, {model_name_or_path}, best model path --> {best_model_path}')
+        print(f'Evaluating {model_type}, {model_name_or_path}, best model path --> {best_model_path}')
         bert_model = MODEL_CLASSES[model_type].from_pretrained(model_name_or_path)
         model = REModel(config=self, bert_model=bert_model)
 
         model.load_state_dict(torch.load(best_model_path, map_location=torch.device(self.device)))
         model.to(self.device)
-        # model = nn.DataParallel(model) # turn off parallel run
         model.eval()
 
         epoch = 0
@@ -1239,8 +1233,7 @@ class Controller(object):
 
         for split in ['dev', 'test']:
             self.test_prefix = split
-            output = (
-                    self.test_prefix == 'test')  # variable used to output result.json file for test prediction submissions on CodaLab website
+            output = (self.test_prefix == 'test')
             print('-' * 89)
             print(f'Beginning evaluation of {split} split, using {input_theta} theta.')
             print('-' * 89)
@@ -1261,5 +1254,5 @@ class Controller(object):
 
 def train_stage_1(config):
     con = Controller(config)
-    con.train(config.trainer.model_type, config.trainer.model_name_or_path, config.trainer.save_name, config)
+    con.train(config.model_type, config.model_name_or_path, config.trainer.save_name, config)
     return

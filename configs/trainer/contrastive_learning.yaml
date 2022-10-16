@@ -15,6 +15,7 @@ dataset_name: train_distant.json
 wiki_loss: 1
 doc_loss: 1
 fp16: True
+bert_model: roberta-base
 load_step: 0
 cuda: 4
 max_length: 512 # max sentence length
@@ -28,5 +29,4 @@ seed: 42
 local_rank: -1
 log_step: 5
 neg_sample_num: 64
-model_name_or_path: 'roberta-base'
 fine_grained: True
